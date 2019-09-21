@@ -94,6 +94,11 @@
 (defun empty-line (point)
   (zerop (length (line-string point))))
 
+(defun ensure-not-on-eof-line (point)
+  (when (and (end-buffer-p point)
+             (char= #\newline (character-at point -1)))
+    (character-offset point -1)))
+
 ;; Vim word
 ;; See http://vimdoc.sourceforge.net/htmldoc/motion.html#word
 ;; word = a sequence of letters, digits and underscores
@@ -142,20 +147,28 @@
     (goto-eol point)))
 
 (define-command vi-next-line (&optional (n 1)) ("p")
-  (next-logical-line n)
-  (fall-within-line (current-point)))
+  (let ((point (current-point)))
+    (next-logical-line n)
+    (ensure-not-on-eof-line point)
+    (fall-within-line point)))
 
 (define-command vi-next-display-line (&optional (n 1)) ("p")
-  (next-line n)
-  (fall-within-line (current-point)))
+  (let ((point (current-point)))
+    (next-line n)
+    (ensure-not-on-eof-line point)
+    (fall-within-line point)))
 
 (define-command vi-previous-line (&optional (n 1)) ("p")
-  (previous-logical-line n)
-  (fall-within-line (current-point)))
+  (let ((point (current-point)))
+    (previous-logical-line n)
+    (ensure-not-on-eof-line point)
+    (fall-within-line point)))
 
 (define-command vi-previous-display-line (&optional (n 1)) ("p")
-  (previous-line n)
-  (fall-within-line (current-point)))
+  (let ((point (current-point)))
+    (previous-line n)
+    (ensure-not-on-eof-line point)
+    (fall-within-line point)))
 
 (defun %vi-forward-word-begin (n)
   (when (< 0 n)
@@ -216,17 +229,20 @@
   (backward-word-begin (current-point) n t))
 
 (define-command vi-forward-word-end (&optional (n 1)) ("p")
-  (character-offset (current-point) 1)
-  (skip-chars-forward (current-point) (lambda (char)
-                                        (or (char= char #\Newline)
-                                            (vi-space-char-p char))))
-  (%vi-forward-word-begin n)
-  (unless (or *vi-delete-recursive*
-              *vi-clear-recursive*)
-    (vi-backward-char)))
+  (let ((p (current-point)))
+    (character-offset p (- *cursor-offset*))
+    (skip-chars-forward p (lambda (char)
+                            (or (char= char #\Newline)
+                                (vi-space-char-p char))))
+    (%vi-forward-word-begin n)
+    (character-offset p *cursor-offset*)))
 
 (define-command vi-forward-word-end-broad (&optional (n 1)) ("p")
-  (forward-word-end (current-point) n t))
+  (let ((p (current-point)))
+    (character-offset p (- *cursor-offset*))
+    (forward-word-end p n t)
+    (ensure-not-on-eof-line p)
+    (character-offset p *cursor-offset*)))
 
 (define-command vi-backward-word-end (&optional (n 1)) ("p")
   (character-offset (current-point) -1)
