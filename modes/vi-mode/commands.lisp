@@ -94,6 +94,15 @@
 (defun empty-line (point)
   (zerop (length (line-string point))))
 
+(defun ensure-not-on-eof-line (point)
+  (when (and (end-buffer-p point)
+             (char= #\newline (character-at point -1)))
+    (character-offset point -1)))
+
+(defun eob-only-line-p (point)
+  (and (end-buffer-p point)
+       (char= #\newline (character-at point -1)))) ;; TODO
+
 ;; Vim word
 ;; See http://vimdoc.sourceforge.net/htmldoc/motion.html#word
 ;; word = a sequence of letters, digits and underscores
@@ -141,8 +150,37 @@
   (when (eolp point)
     (goto-eol point)))
 
+;; (define-command vi-next-line (&optional (n 1)) ("p")
+;;   (next-logical-line n)
+;;   (fall-within-line (current-point)))
+
+(defun next-line-aux (point
+                      point-column-fn
+                      forward-line-fn
+                      move-to-column-fn)
+  (unless (prog1 (funcall forward-line-fn point 1)
+            (funcall move-to-column-fn point *next-line-prev-column*))
+    (cond ((plusp n)
+           ;; (move-to-end-of-buffer)
+           (editor-error "End of buffer"))
+          (t
+           ;; (move-to-beginning-of-buffer)
+           (editor-error "Beginning of buffer")))))
+
 (define-command vi-next-line (&optional (n 1)) ("p")
-  (next-logical-line n)
+  (with-point ((p (current-point))
+               (q (current-point)))
+     (unless (continue-flag :next-line)
+       (setq *next-line-prev-column* (point-column p)))
+     (dotimes (_ n)
+       (next-line-aux q
+                      nil ;#'point-column
+                      #'line-offset
+                      #'move-to-column)
+       (when (eob-only-line-p q)
+         (return))
+       (move-point p q))
+     (move-point (current-point) p))
   (fall-within-line (current-point)))
 
 (define-command vi-next-display-line (&optional (n 1)) ("p")
